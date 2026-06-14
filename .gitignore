@@ -1,0 +1,35 @@
+# Env
+.env
+*.env.local
+
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# ML artifacts
+ml-training/saved_models/*.pkl
+ml-training/saved_models/*.joblib
+ai-service/saved_models/
+
+# Uploads
+ai-service/uploads/
+
+# Docker volumes (local)
+.docker/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

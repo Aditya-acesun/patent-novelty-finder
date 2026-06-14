@@ -1,0 +1,113 @@
+version: "3.9"
+
+services:
+  # ── Vector Database ──────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: pnf_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # ── Redis (Celery broker + result backend) ───────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: pnf_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Node.js Backend ──────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pnf_backend
+    ports:
+      - "4000:4000"
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # ── Python AI Service (FastAPI + Celery worker) ──────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: pnf_ai
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./ai-service:/app
+      - ./ml-training/saved_models:/app/saved_models
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  # ── Celery Worker ────────────────────────────────────
+  celery-worker:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: pnf_celery
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./ai-service:/app
+      - ./ml-training/saved_models:/app/saved_models
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  # ── React Frontend ───────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pnf_frontend
+    ports:
+      - "5173:5173"
+    env_file: .env
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # ── Nginx Reverse Proxy ──────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: pnf_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - ai-service
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  redis_data:
+  uploads_data:

@@ -1,0 +1,26 @@
+version: "3.9"
+# Production overrides — use with:
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    command: npm run start          # compiled JS, not ts-node-dev
+    environment:
+      NODE_ENV: production
+
+  ai-service:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    environment:
+      ENVIRONMENT: production
+
+  celery-worker:
+    command: celery -A app.tasks.celery_app worker --loglevel=warning --concurrency=4
+
+  frontend:
+    build:
+      target: production            # multi-stage build in Phase 9
+    command: ["nginx", "-g", "daemon off;"]
+
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
